@@ -1,26 +1,18 @@
-"""AuditFAST MCP server.
+"""Engagement orchestration — the single engine behind every front door.
 
-Tool surface, in the order an engagement uses it:
+Both the MCP server (``server.py``) and the web API (``webapi/``) call these
+functions. Each returns a plain dict; errors come back as ``{"error", "next_step"}``
+rather than raising, so any caller can relay the problem and the recovery step.
 
-    auditfast_sign_in            -> device code for delegated read-only access
-    auditfast_sign_in_complete   -> poll until the token lands
-    auditfast_start_engagement   -> workspace URL + project name
-    auditfast_discover_workspace -> inventory + proposed scope with rationale
-    auditfast_confirm_scope      -> human-in-the-loop gate; nothing runs before this
-    auditfast_run_audit          -> deterministic rule engine over the confirmed scope
-    auditfast_get_report         -> Markdown report
-    auditfast_get_audit_log      -> hash-chained proof of every call made
-
-Every tool returns a dict. Errors come back as ``{"error": ...}`` with a next step
-rather than raising, so the calling model can recover in-conversation.
+Nothing here knows about MCP or HTTP. The read-only guarantee lives one layer down, in
+the guardrail — this module only ever *describes* work and hands it over.
 """
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any
-
-from mcp.server.fastmcp import FastMCP
 
 from auditfast_mcp.auth import AuthError, get_authenticator
 from auditfast_mcp.catalog.loader import get_check, load_catalog
@@ -35,14 +27,12 @@ from auditfast_mcp.scope import propose_scope
 from auditfast_mcp.scoring.rubric import ScoredItem, roll_up
 from auditfast_mcp.store import get_store
 
-mcp = FastMCP("auditfast")
-
 
 # -- wiring ------------------------------------------------------------------
 
 
-def _client_for(engagement_id: str | None = None) -> FabricClient:
-    """Build a guardrailed Fabric client. This is the only construction path."""
+def client_for(engagement_id: str | None = None) -> FabricClient:
+    """Build a guardrailed Fabric client. The only client-construction path."""
     settings = get_settings()
     store = get_store()
     authenticator = get_authenticator()
@@ -55,7 +45,7 @@ def _client_for(engagement_id: str | None = None) -> FabricClient:
     return FabricClient(guardrail)
 
 
-def _error(message: str, next_step: str = "") -> dict[str, Any]:
+def error(message: str, next_step: str = "") -> dict[str, Any]:
     payload: dict[str, Any] = {"error": message}
     if next_step:
         payload["next_step"] = next_step
@@ -66,17 +56,26 @@ def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+def _rollup_from_results(results: list[dict]) -> Any:
+    return roll_up(
+        [
+            ScoredItem(
+                item_id=r["item_id"],
+                area=r["area"],
+                category=r["category"],
+                pillar=r["pillar"],
+                score=r["score"],
+                status=r["status"],
+            )
+            for r in results
+        ]
+    )
+
+
 # -- auth --------------------------------------------------------------------
 
 
-@mcp.tool()
-async def auditfast_sign_in() -> dict:
-    """Start read-only sign-in to Microsoft Fabric.
-
-    Returns a device code the auditor enters in a browser. AuditFAST acts as the
-    signed-in user, so it can only ever read what that person can already see.
-    Follow with auditfast_sign_in_complete.
-    """
+async def sign_in() -> dict:
     authenticator = get_authenticator()
     try:
         existing = authenticator.signed_in_account()
@@ -84,14 +83,14 @@ async def auditfast_sign_in() -> dict:
             return {
                 "already_signed_in": True,
                 "account": existing,
-                "next_step": "Call auditfast_start_engagement.",
+                "next_step": "Start an engagement.",
             }
         flow = await authenticator.begin()
     except AuthError as exc:
-        return _error(str(exc))
+        return error(str(exc))
 
     return {
-        "action_required": "Sign in with the code below, then call auditfast_sign_in_complete.",
+        "action_required": "Sign in with the code below, then complete sign-in.",
         "verification_uri": flow["verification_uri"],
         "user_code": flow["user_code"],
         "expires_in_seconds": flow["expires_in_seconds"],
@@ -99,46 +98,77 @@ async def auditfast_sign_in() -> dict:
     }
 
 
-@mcp.tool()
-async def auditfast_sign_in_complete(poll_seconds: int = 60) -> dict:
-    """Finish sign-in by polling for the token. Safe to call repeatedly while pending."""
+async def sign_in_complete(poll_seconds: int = 60) -> dict:
     try:
         return await get_authenticator().complete(poll_seconds=min(max(poll_seconds, 5), 120))
     except AuthError as exc:
-        return _error(str(exc), "Call auditfast_sign_in to start a fresh sign-in.")
+        return error(str(exc), "Start a fresh sign-in.")
 
 
-@mcp.tool()
-async def auditfast_sign_out() -> dict:
-    """Forget the cached credential."""
+def sign_out() -> dict:
     get_authenticator().sign_out()
     return {"signed_out": True}
+
+
+def status() -> dict:
+    settings = get_settings()
+    authenticator = get_authenticator()
+    try:
+        account = authenticator.signed_in_account()
+        client_error = ""
+    except AuthError as exc:
+        account = None
+        client_error = str(exc)
+
+    return {
+        "signed_in_as": account,
+        "client_id_configured": bool(settings.client_id),
+        "tenant": settings.tenant_id,
+        "configuration_error": client_error,
+        "definition_reads_enabled": settings.enable_definition_reads,
+        "data_dir": str(settings.data_dir),
+        "checks_in_catalog": len(load_catalog()),
+        "limits": {
+            "request_timeout_seconds": settings.request_timeout_seconds,
+            "max_concurrent_calls": settings.max_concurrent_calls,
+            "max_items_inspected": settings.max_items_inspected,
+        },
+        "write_capability": "none — the guardrail exposes no write path on any protocol",
+    }
+
+
+def list_checks() -> dict:
+    return {
+        "checks": [
+            {
+                "item_id": c.item_id,
+                "area": c.area,
+                "category": c.category,
+                "pillar": c.pillar.value,
+                "title": c.title,
+                "rule": c.rule,
+                "scoring": c.coverage_semantics.value,
+                "needs_definition_read": c.requires_definition,
+            }
+            for c in load_catalog()
+        ]
+    }
 
 
 # -- engagement --------------------------------------------------------------
 
 
-@mcp.tool()
-async def auditfast_start_engagement(
-    workspace_url: str, project_name: str, notes: str = ""
-) -> dict:
-    """Open an engagement against one Fabric workspace.
-
-    Accepts a portal URL (https://app.fabric.microsoft.com/groups/<guid>/...), a bare
-    workspace GUID, or a workspace display name. Nothing is read from Fabric yet.
-    """
+def start_engagement(workspace_url: str, project_name: str, notes: str = "") -> dict:
     if not project_name.strip():
-        return _error("project_name is required.")
-
+        return error("project_name is required.")
     try:
         ref = parse_workspace_url(workspace_url)
     except ValueError as exc:
-        return _error(str(exc))
+        return error(str(exc))
 
     store = get_store()
     engagement_id = store.create_engagement(project_name.strip(), workspace_url.strip(), notes)
 
-    resolved_note = ""
     if ref.workspace_id:
         store.update_engagement(engagement_id, workspace_id=ref.workspace_id)
         resolved_note = f"Workspace GUID {ref.workspace_id} parsed from the input."
@@ -152,44 +182,34 @@ async def auditfast_start_engagement(
         "engagement_id": engagement_id,
         "project_name": project_name.strip(),
         "workspace_reference": resolved_note,
-        "next_step": f"Call auditfast_discover_workspace('{engagement_id}').",
+        "next_step": "Discover the workspace.",
     }
 
 
-@mcp.tool()
-async def auditfast_list_engagements() -> dict:
-    """List engagements held in the local store."""
+def list_engagements() -> dict:
     return {"engagements": get_store().list_engagements()}
 
 
-# -- discovery ---------------------------------------------------------------
+def get_engagement(engagement_id: str) -> dict | None:
+    return get_store().get_engagement(engagement_id)
 
 
-@mcp.tool()
-async def auditfast_discover_workspace(engagement_id: str) -> dict:
-    """Read the workspace inventory and propose what to audit.
-
-    Read-only: lists items and workspace properties, no definitions and no writes.
-    Returns the artifacts judged relevant (with the reason each was included or
-    excluded) and the checks that would run. Nothing is audited until
-    auditfast_confirm_scope is called.
-    """
+async def discover_workspace(engagement_id: str) -> dict:
     store = get_store()
     settings = get_settings()
 
     engagement = store.get_engagement(engagement_id)
     if engagement is None:
-        return _error(f"Unknown engagement {engagement_id!r}.", "Call auditfast_list_engagements.")
+        return error(f"Unknown engagement {engagement_id!r}.", "List engagements to find a valid id.")
 
-    client = _client_for(engagement_id)
-
+    client = client_for(engagement_id)
     workspace_id = engagement.get("workspace_id")
     try:
         if not workspace_id:
             ref = parse_workspace_url(engagement["workspace_url"])
             match = await client.resolve_workspace_by_name(ref.workspace_name or "")
             if match is None:
-                return _error(
+                return error(
                     f"No workspace named {ref.workspace_name!r} is visible to the signed-in "
                     "account.",
                     "Check the name, or pass the workspace URL from the Fabric portal.",
@@ -199,14 +219,14 @@ async def auditfast_discover_workspace(engagement_id: str) -> dict:
 
         workspace = await discover_inventory(client, workspace_id)
     except GuardrailRejection as exc:
-        return _error(f"Guardrail blocked a discovery call: {exc}")
+        return error(f"Guardrail blocked a discovery call: {exc}")
     except EvidenceUnavailable as exc:
-        return _error(
+        return error(
             str(exc),
             "Confirm the signed-in account has at least Viewer access to this workspace.",
         )
     except AuthError as exc:
-        return _error(str(exc), "Call auditfast_sign_in.")
+        return error(str(exc), "Sign in again.")
     finally:
         await client.aclose()
 
@@ -236,38 +256,25 @@ async def auditfast_discover_workspace(engagement_id: str) -> dict:
 
     payload = proposal.to_dict()
     payload["engagement_id"] = engagement_id
-    payload["next_step"] = (
-        f"Review the proposal, then call auditfast_confirm_scope('{engagement_id}', "
-        "confirm=True) — optionally with exclude_artifact_ids or exclude_item_ids."
-    )
+    payload["next_step"] = "Review the proposal, then confirm the scope."
     return payload
 
 
-# -- confirmation gate -------------------------------------------------------
-
-
-@mcp.tool()
-async def auditfast_confirm_scope(
+def confirm_scope(
     engagement_id: str,
     confirm: bool = False,
     exclude_artifact_ids: list[str] | None = None,
     include_artifact_ids: list[str] | None = None,
     exclude_item_ids: list[str] | None = None,
 ) -> dict:
-    """Confirm what will be audited. This gate cannot be skipped.
-
-    By default the proposed scope is taken as-is. Pass exclude_artifact_ids to drop
-    artifacts, include_artifact_ids to add ones the proposal excluded, and
-    exclude_item_ids to drop specific checklist items.
-    """
     store = get_store()
     engagement = store.get_engagement(engagement_id)
     if engagement is None:
-        return _error(f"Unknown engagement {engagement_id!r}.")
+        return error(f"Unknown engagement {engagement_id!r}.")
     if engagement.get("status") not in {"discovered", "scoped", "audited"}:
-        return _error(
+        return error(
             "Nothing has been discovered for this engagement yet.",
-            f"Call auditfast_discover_workspace('{engagement_id}').",
+            "Discover the workspace first.",
         )
 
     inventory = store.get_inventory(engagement_id)
@@ -299,14 +306,11 @@ async def auditfast_confirm_scope(
             "engagement_id": engagement_id,
             "would_audit_artifacts": len(selected),
             "would_run_checks": [c.item_id for c in in_scope_checks],
-            "next_step": (
-                "This is a dry run. Re-call with confirm=True to freeze this scope and "
-                "unlock auditfast_run_audit."
-            ),
+            "next_step": "This is a dry run. Confirm to freeze this scope and unlock the audit.",
         }
 
     if not in_scope_checks:
-        return _error(
+        return error(
             "The resulting scope contains no runnable checks.",
             "Widen the scope or re-run discovery.",
         )
@@ -321,39 +325,30 @@ async def auditfast_confirm_scope(
         "checks_in_scope": len(in_scope_checks),
         "excluded_artifacts": sorted(excluded_artifacts),
         "excluded_items": sorted(excluded_items),
-        "next_step": f"Call auditfast_run_audit('{engagement_id}').",
+        "next_step": "Run the audit.",
     }
 
 
-# -- the audit ---------------------------------------------------------------
-
-
-@mcp.tool()
-async def auditfast_run_audit(engagement_id: str) -> dict:
-    """Run the confirmed checks against the workspace and score them.
-
-    Read-only throughout. Every check is a deterministic rule over collected evidence,
-    so the same workspace state always produces the same score.
-    """
+async def run_audit(engagement_id: str) -> dict:
     store = get_store()
     settings = get_settings()
 
     engagement = store.get_engagement(engagement_id)
     if engagement is None:
-        return _error(f"Unknown engagement {engagement_id!r}.")
+        return error(f"Unknown engagement {engagement_id!r}.")
     if not engagement.get("scope_confirmed_at"):
-        return _error(
+        return error(
             "Scope has not been confirmed for this engagement.",
-            f"Call auditfast_confirm_scope('{engagement_id}', confirm=True) first.",
+            "Confirm the scope first.",
         )
 
     artifact_ids, item_ids = store.get_confirmed_scope(engagement_id)
     checks = [check for item_id in item_ids if (check := get_check(item_id)) is not None]
     if not checks:
-        return _error("The confirmed scope resolved to zero known checks.")
+        return error("The confirmed scope resolved to zero known checks.")
 
     workspace_id = engagement["workspace_id"]
-    client = _client_for(engagement_id)
+    client = client_for(engagement_id)
     run_id = store.start_run(engagement_id)
 
     try:
@@ -365,29 +360,16 @@ async def auditfast_run_audit(engagement_id: str) -> dict:
         )
     except GuardrailRejection as exc:
         store.finish_run(run_id, {"error": str(exc)}, status="blocked")
-        return _error(f"Guardrail blocked an evidence call: {exc}")
+        return error(f"Guardrail blocked an evidence call: {exc}")
     except (EvidenceUnavailable, AuthError) as exc:
         store.finish_run(run_id, {"error": str(exc)}, status="failed")
-        return _error(str(exc))
+        return error(str(exc))
     finally:
         await client.aclose()
 
     results = run_rules(checks, bundle, settings)
     payload = [r.to_dict() for r in results]
-
-    rollup = roll_up(
-        [
-            ScoredItem(
-                item_id=r.item_id,
-                area=r.area,
-                category=r.category,
-                pillar=r.pillar,
-                score=r.score,
-                status=r.status,
-            )
-            for r in results
-        ]
-    )
+    rollup = _rollup_from_results(payload)
 
     summary = {
         "overall_score": rollup.overall,
@@ -413,49 +395,25 @@ async def auditfast_run_audit(engagement_id: str) -> dict:
         "run_id": run_id,
         "summary": summary,
         "results": payload,
-        "next_step": f"Call auditfast_get_report('{engagement_id}') for the written report.",
+        "next_step": "Open the report.",
     }
 
 
-# -- outputs -----------------------------------------------------------------
-
-
-@mcp.tool()
-async def auditfast_get_report(engagement_id: str, save_to_file: bool = True) -> dict:
-    """Render the Markdown audit report for the latest run."""
+def get_report(engagement_id: str, save_to_file: bool = True) -> dict:
     store = get_store()
     settings = get_settings()
 
     engagement = store.get_engagement(engagement_id)
     if engagement is None:
-        return _error(f"Unknown engagement {engagement_id!r}.")
+        return error(f"Unknown engagement {engagement_id!r}.")
 
     run = store.latest_run(engagement_id)
     if run is None or run["status"] != "complete":
-        return _error(
-            "No completed audit run for this engagement.",
-            f"Call auditfast_run_audit('{engagement_id}').",
-        )
+        return error("No completed audit run for this engagement.", "Run the audit first.")
 
     results = store.get_results(run["id"])
-    summary = run["summary_json"]
-    import json  # local: only the report path needs it
-
-    summary_data = json.loads(summary) if summary else {}
-
-    rollup = roll_up(
-        [
-            ScoredItem(
-                item_id=r["item_id"],
-                area=r["area"],
-                category=r["category"],
-                pillar=r["pillar"],
-                score=r["score"],
-                status=r["status"],
-            )
-            for r in results
-        ]
-    )
+    summary_data = json.loads(run["summary_json"]) if run["summary_json"] else {}
+    rollup = _rollup_from_results(results)
 
     markdown = render_report(
         project_name=engagement["project_name"],
@@ -471,26 +429,21 @@ async def auditfast_get_report(engagement_id: str, save_to_file: bool = True) ->
     saved_path = None
     if save_to_file:
         settings.reports_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"{engagement_id}_{run['id']}.md"
-        path = settings.reports_dir / filename
+        path = settings.reports_dir / f"{engagement_id}_{run['id']}.md"
         path.write_text(markdown, encoding="utf-8")
         saved_path = str(path)
 
     return {
         "engagement_id": engagement_id,
         "run_id": run["id"],
+        "summary": summary_data,
+        "results": results,
         "saved_to": saved_path,
         "report_markdown": markdown,
     }
 
 
-@mcp.tool()
-async def auditfast_get_audit_log(engagement_id: str = "", limit: int = 100) -> dict:
-    """Return the hash-chained log of every Fabric call this server made.
-
-    This is the read-only proof: each entry records the guardrail decision, the method,
-    and the URL, and the chain is verified on read.
-    """
+def get_audit_log(engagement_id: str = "", limit: int = 100) -> dict:
     store = get_store()
     intact, message = store.verify_audit_chain()
     return {
@@ -498,58 +451,3 @@ async def auditfast_get_audit_log(engagement_id: str = "", limit: int = 100) -> 
         "chain_status": message,
         "entries": store.get_audit_log(engagement_id or None, limit=min(max(limit, 1), 500)),
     }
-
-
-@mcp.tool()
-async def auditfast_status() -> dict:
-    """Server configuration and sign-in state — start here when something is not working."""
-    settings = get_settings()
-    authenticator = get_authenticator()
-    try:
-        account = authenticator.signed_in_account()
-    except AuthError as exc:
-        account = None
-        client_error = str(exc)
-    else:
-        client_error = ""
-
-    return {
-        "signed_in_as": account,
-        "client_id_configured": bool(settings.client_id),
-        "tenant": settings.tenant_id,
-        "configuration_error": client_error,
-        "definition_reads_enabled": settings.enable_definition_reads,
-        "data_dir": str(settings.data_dir),
-        "checks_in_catalog": len(load_catalog()),
-        "limits": {
-            "request_timeout_seconds": settings.request_timeout_seconds,
-            "max_concurrent_calls": settings.max_concurrent_calls,
-            "max_items_inspected": settings.max_items_inspected,
-        },
-        "write_capability": "none — the guardrail exposes no write path on any protocol",
-    }
-
-
-@mcp.tool()
-async def auditfast_list_checks() -> dict:
-    """List the checks in the MVP catalog with their areas, pillars, and rules."""
-    return {
-        "checks": [
-            {
-                "item_id": c.item_id,
-                "area": c.area,
-                "category": c.category,
-                "pillar": c.pillar.value,
-                "title": c.title,
-                "rule": c.rule,
-                "scoring": c.coverage_semantics.value,
-                "needs_definition_read": c.requires_definition,
-            }
-            for c in load_catalog()
-        ]
-    }
-
-
-def run() -> None:
-    get_settings().ensure_dirs()
-    mcp.run()

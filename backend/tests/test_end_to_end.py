@@ -15,7 +15,7 @@ import httpx
 import pytest
 import respx
 
-from auditfast_mcp import server
+from auditfast_mcp import server, services
 from auditfast_mcp.config import Settings
 from auditfast_mcp.store.db import Store
 
@@ -79,9 +79,9 @@ def wired(tmp_path, monkeypatch):
     settings.ensure_dirs()
     store = Store(tmp_path / "e2e.sqlite3")
 
-    monkeypatch.setattr(server, "get_settings", lambda: settings)
-    monkeypatch.setattr(server, "get_store", lambda: store)
-    monkeypatch.setattr(server, "get_authenticator", lambda: FakeAuthenticator())
+    monkeypatch.setattr(services, "get_settings", lambda: settings)
+    monkeypatch.setattr(services, "get_store", lambda: store)
+    monkeypatch.setattr(services, "get_authenticator", lambda: FakeAuthenticator())
     yield settings, store
     store.close()
 
@@ -188,7 +188,7 @@ async def test_full_engagement_flow(wired) -> None:
     # 3. Nothing may run before the auditor confirms.
     blocked = await server.auditfast_run_audit(engagement_id)
     assert "error" in blocked
-    assert "confirm" in blocked["next_step"]
+    assert "confirm" in blocked["next_step"].lower()
 
     # A dry run shows what would happen without freezing anything.
     dry = await server.auditfast_confirm_scope(engagement_id, confirm=False)
@@ -261,9 +261,9 @@ async def test_definition_checks_report_unavailable_when_reads_are_off(
     )
     settings.ensure_dirs()
     store = Store(tmp_path / "e2e2.sqlite3")
-    monkeypatch.setattr(server, "get_settings", lambda: settings)
-    monkeypatch.setattr(server, "get_store", lambda: store)
-    monkeypatch.setattr(server, "get_authenticator", lambda: FakeAuthenticator())
+    monkeypatch.setattr(services, "get_settings", lambda: settings)
+    monkeypatch.setattr(services, "get_store", lambda: store)
+    monkeypatch.setattr(services, "get_authenticator", lambda: FakeAuthenticator())
     mock_fabric(respx.mock)
 
     started = await server.auditfast_start_engagement(PORTAL_URL, "No Definitions")
@@ -287,4 +287,4 @@ async def test_definition_checks_report_unavailable_when_reads_are_off(
 async def test_unknown_engagement_is_a_friendly_error(wired) -> None:
     result = await server.auditfast_discover_workspace("eng_does_not_exist")
     assert "error" in result
-    assert "auditfast_list_engagements" in result["next_step"]
+    assert "List engagements" in result["next_step"]
