@@ -31,6 +31,16 @@ __pycache__/
 .venv/
 venv/
 
+# Python packaging / tooling
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# AuditFAST local engagement data (SQLite store, token cache, generated reports)
+*.sqlite3
+token_cache.bin
+/reports/
+
 # Misc
 *.tmp
 .cache/

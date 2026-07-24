@@ -1,0 +1,424 @@
+# AuditFAST Core — MVP automated check catalog.
+#
+# Every record here is deterministic: a pure function over evidence collected through
+# read-only Fabric REST calls. Item IDs, titles, and categories are taken verbatim from
+# the baseline checklist (Local/Audit Excel 1/Audit/02-audit-checklist.md) so scores are
+# comparable with manually run engagements. Coverage bands live in scoring/rubric.py.
+#
+# requires_definition: true  -> needs POST .../getDefinition, gated behind
+#                               AUDITFAST_ENABLE_DEFINITION_READS (see config.py).
+
+# ---------------------------------------------------------------- Area 1 — Architecture
+
+- item_id: "1.1.7"
+  area: 1
+  category: "Solution Architecture"
+  pillar: Foundation
+  title: "Workspace organization follows a logical boundary (by domain, by team, or by environment)"
+  artifact_types: []
+  inspector: WorkspaceInspector
+  protocol: rest
+  evidence: "Workspace display name and description from GET /v1/workspaces/{id}."
+  rule: "Workspace name matches the engagement naming convention regex and carries a description."
+  rule_id: workspace_naming_convention
+  coverage_semantics: binary
+  na_rule: "Never N/A — every solution has a workspace organization scheme."
+  default_weight: normal
+  severity_hint: low
+  remediation: >-
+    Adopt a documented workspace naming convention that encodes domain and environment
+    (for example CONTOSO_Sales_PROD) and populate the workspace description so the
+    boundary is self-evident to anyone browsing the tenant.
+
+# ------------------------------------------------------- Area 2 — Integration & Ingestion
+
+- item_id: "2.1.1"
+  area: 2
+  category: "Pipeline Design"
+  pillar: OperationalExcellence
+  title: "Pipelines follow consistent naming conventions"
+  artifact_types: [pipeline]
+  inspector: PipelineInspector
+  protocol: rest
+  evidence: "Display names of every DataPipeline item in the workspace."
+  rule: "coverage = pipelines whose name matches the convention regex / total pipelines"
+  rule_id: pipeline_naming_convention
+  coverage_semantics: coverage
+  na_rule: "N/A when the workspace contains no pipelines."
+  default_weight: normal
+  severity_hint: low
+  remediation: >-
+    Rename pipelines to the agreed convention (for example PL_<source>_<layer>_<entity>)
+    and add a naming-standard gate to the deployment checklist.
+
+- item_id: "2.1.2"
+  area: 2
+  category: "Pipeline Design"
+  pillar: Security
+  title: "Pipelines are parameterized (not hardcoded values for sources, targets, dates)"
+  artifact_types: [pipeline]
+  inspector: PipelineInspector
+  protocol: rest
+  requires_definition: true
+  evidence: "Pipeline definition JSON — parameters block plus literal scan of activity properties."
+  rule: >-
+    coverage = pipelines that declare parameters and contain no hardcoded server, URL,
+    absolute path, or IP literal / total pipelines
+  rule_id: pipeline_parameterized
+  coverage_semantics: coverage
+  na_rule: "N/A when the workspace contains no pipelines."
+  default_weight: high
+  severity_hint: high
+  remediation: >-
+    Promote hardcoded servers, container paths, and date literals into pipeline
+    parameters or variables, and bind environment-specific values through deployment
+    rules rather than editing activities per environment.
+
+- item_id: "2.1.6"
+  area: 2
+  category: "Pipeline Design"
+  pillar: OperationalExcellence
+  title: "Pipeline annotations/descriptions populated"
+  artifact_types: [pipeline]
+  inspector: PipelineInspector
+  protocol: rest
+  requires_definition: true
+  evidence: "Pipeline item description and per-activity description fields."
+  rule: "coverage = pipelines with a non-empty description and >=80% of activities described / total"
+  rule_id: pipeline_annotations
+  coverage_semantics: coverage
+  na_rule: "N/A when the workspace contains no pipelines."
+  default_weight: low
+  severity_hint: low
+  remediation: >-
+    Populate the description on each pipeline and on every non-trivial activity so the
+    orchestration is readable without opening each activity's settings.
+
+- item_id: "2.4.1"
+  area: 2
+  category: "Error Handling & Retry"
+  pillar: Reliability
+  title: "All pipeline activities have appropriate retry policies configured"
+  artifact_types: [pipeline]
+  inspector: PipelineInspector
+  protocol: rest
+  requires_definition: true
+  evidence: "policy.retry on every retryable activity across all pipeline definitions."
+  rule: "coverage = retryable activities with policy.retry >= 1 / total retryable activities"
+  rule_id: pipeline_retry_configured
+  coverage_semantics: coverage
+  na_rule: "N/A when the workspace contains no pipelines."
+  default_weight: high
+  severity_hint: high
+  remediation: >-
+    Set a retry count on every activity that touches an external system (Copy, Notebook,
+    Web, Lookup, Stored Procedure). Transient source failures should not fail a run.
+
+- item_id: "2.4.2"
+  area: 2
+  category: "Error Handling & Retry"
+  pillar: Reliability
+  title: "Retry count and interval follow reasonable patterns (not infinite retries)"
+  artifact_types: [pipeline]
+  inspector: PipelineInspector
+  protocol: rest
+  requires_definition: true
+  evidence: "policy.retry and policy.retryIntervalInSeconds on activities that configure retries."
+  rule: >-
+    coverage = activities with 1 <= retry <= 5 and retryIntervalInSeconds >= 10 /
+    activities that configure a retry at all
+  rule_id: pipeline_retry_bounds
+  coverage_semantics: coverage
+  na_rule: "N/A when no activity configures a retry policy."
+  default_weight: normal
+  severity_hint: medium
+  remediation: >-
+    Bound retries at 3-5 attempts with an interval of at least 30 seconds. Unbounded or
+    zero-interval retries turn a source outage into a capacity-consuming hot loop.
+
+- item_id: "2.4.3"
+  area: 2
+  category: "Error Handling & Retry"
+  pillar: Reliability
+  title: "On-failure paths defined for critical activities"
+  artifact_types: [pipeline]
+  inspector: PipelineInspector
+  protocol: rest
+  requires_definition: true
+  evidence: "Activity dependsOn conditions across pipeline definitions."
+  rule: >-
+    coverage = pipelines with at least one Failed/Skipped/Completed dependency edge /
+    pipelines with more than one activity
+  rule_id: pipeline_failure_paths
+  coverage_semantics: coverage
+  na_rule: "N/A when the workspace contains no multi-activity pipelines."
+  default_weight: high
+  severity_hint: high
+  remediation: >-
+    Add explicit on-failure branches to critical activities so failures are logged,
+    quarantined, and surfaced rather than only ending the run.
+
+- item_id: "2.4.5"
+  area: 2
+  category: "Error Handling & Retry"
+  pillar: OperationalExcellence
+  title: "Pipeline failure triggers notification (Data Activator, email, Teams)"
+  artifact_types: [pipeline]
+  inspector: PipelineInspector
+  protocol: rest
+  requires_definition: true
+  evidence: "Presence of Teams/Office365 Outlook/Web notification activities on failure edges."
+  rule: "coverage = pipelines with a notification activity reachable from a failure edge / total"
+  rule_id: pipeline_failure_notification
+  coverage_semantics: coverage
+  na_rule: "N/A when the workspace contains no pipelines."
+  default_weight: normal
+  severity_hint: high
+  remediation: >-
+    Attach a Teams, Outlook, or Data Activator notification to the failure path of every
+    scheduled pipeline so failures are pushed rather than discovered at the next refresh.
+
+# --------------------------------------------------- Area 3 — Processing & Transformation
+
+- item_id: "3.1.2"
+  area: 3
+  category: "Spark Notebook Quality"
+  pillar: OperationalExcellence
+  title: "Notebooks are parameterized using Fabric notebook parameters or widgets"
+  artifact_types: [notebook]
+  inspector: NotebookInspector
+  protocol: rest
+  requires_definition: true
+  evidence: "Notebook definition — presence of a cell tagged 'parameters'."
+  rule: "coverage = notebooks containing a parameters-tagged cell / total notebooks"
+  rule_id: notebook_parameterized
+  coverage_semantics: coverage
+  na_rule: "N/A when the workspace contains no notebooks."
+  default_weight: normal
+  severity_hint: medium
+  remediation: >-
+    Add a parameters-tagged cell to each notebook and pass environment, date, and path
+    values from the orchestrating pipeline instead of editing cells between runs.
+
+- item_id: "3.1.3"
+  area: 3
+  category: "Spark Notebook Quality"
+  pillar: Security
+  title: "No hardcoded paths, connection strings, secrets, or environment-specific values"
+  artifact_types: [notebook]
+  inspector: NotebookInspector
+  protocol: rest
+  requires_definition: true
+  evidence: "Notebook source cells scanned for secret and absolute-path anti-patterns."
+  rule: "coverage = notebooks with zero secret/hardcoded-path matches / total notebooks"
+  rule_id: notebook_no_hardcoded_secrets
+  coverage_semantics: coverage
+  na_rule: "N/A when the workspace contains no notebooks."
+  default_weight: high
+  severity_hint: critical
+  remediation: >-
+    Move every credential to Key Vault and resolve it at runtime; replace absolute
+    abfss:// literals with parameters or mounted shortcuts. Rotate any key found in code.
+
+- item_id: "3.1.7"
+  area: 3
+  category: "Spark Notebook Quality"
+  pillar: OperationalExcellence
+  title: "All notebooks have meaningful, consistent names"
+  artifact_types: [notebook]
+  inspector: NotebookInspector
+  protocol: rest
+  evidence: "Display names of every Notebook item in the workspace."
+  rule: "coverage = notebooks whose name matches the convention regex / total notebooks"
+  rule_id: notebook_naming_convention
+  coverage_semantics: coverage
+  na_rule: "N/A when the workspace contains no notebooks."
+  default_weight: low
+  severity_hint: low
+  remediation: >-
+    Rename notebooks to the agreed convention (for example NB_<layer>_<entity>) and
+    retire scratch names such as Untitled or Copy of.
+
+- item_id: "3.1.8"
+  area: 3
+  category: "Spark Notebook Quality"
+  pillar: CostOptimization
+  title: "Notebook execution timeout / max runtime configured to prevent runaway Spark sessions"
+  artifact_types: [notebook]
+  inspector: NotebookInspector
+  protocol: rest
+  requires_definition: true
+  evidence: "Notebook metadata / %%configure block for a session timeout setting."
+  rule: "coverage = notebooks declaring a session or execution timeout / total notebooks"
+  rule_id: notebook_timeout_configured
+  coverage_semantics: coverage
+  na_rule: "N/A when the workspace contains no notebooks."
+  default_weight: normal
+  severity_hint: medium
+  remediation: >-
+    Configure a session timeout in the notebook or its Environment, and set an activity
+    timeout on the orchestrating pipeline so a hung run cannot burn capacity indefinitely.
+
+# ------------------------------------------------------- Area 6 — Security & Access Control
+
+- item_id: "6.1.1"
+  area: 6
+  category: "Identity & Access Management"
+  pillar: Security
+  title: "Workspace roles follow least-privilege principle (Admin/Member/Contributor/Viewer used correctly)"
+  artifact_types: [workspace]
+  inspector: WorkspaceInspector
+  protocol: rest
+  evidence: "GET /v1/workspaces/{id}/roleAssignments — role distribution across principals."
+  rule: >-
+    coverage = assignments within least privilege / total assignments, where a breach is
+    an elevated role (Admin/Member) held by an individual user, or Admin granted beyond
+    two break-glass principals
+  rule_id: workspace_least_privilege
+  coverage_semantics: coverage
+  na_rule: "Never N/A."
+  default_weight: high
+  severity_hint: high
+  remediation: >-
+    Reduce Admin to a maximum of two break-glass principals, move day-to-day users to
+    Contributor or Viewer, and re-grant elevated roles only through a reviewed request.
+
+- item_id: "6.1.2"
+  area: 6
+  category: "Identity & Access Management"
+  pillar: Security
+  title: "No individual user accounts for role assignments — security groups used"
+  artifact_types: [workspace]
+  inspector: WorkspaceInspector
+  protocol: rest
+  evidence: "principal.type on each role assignment (Group vs User vs ServicePrincipal)."
+  rule: "coverage = assignments to Group principals / total assignments"
+  rule_id: workspace_group_based_access
+  coverage_semantics: coverage
+  na_rule: "Never N/A."
+  default_weight: high
+  severity_hint: high
+  remediation: >-
+    Replace individual user grants with Entra security groups so joiner/mover/leaver
+    changes flow through group membership instead of per-workspace edits.
+
+- item_id: "6.1.3"
+  area: 6
+  category: "Identity & Access Management"
+  pillar: Security
+  title: "Service principals / Managed Identities used for automation (not personal accounts)"
+  artifact_types: [workspace]
+  inspector: WorkspaceInspector
+  protocol: rest
+  evidence: "Presence of ServicePrincipal or ManagedIdentity principals in role assignments."
+  rule: "binary: at least one ServicePrincipal/ManagedIdentity principal holds a workspace role"
+  rule_id: workspace_spn_for_automation
+  coverage_semantics: binary
+  na_rule: "N/A only when the workspace runs nothing on a schedule."
+  default_weight: high
+  severity_hint: critical
+  remediation: >-
+    Create a dedicated service principal or workspace identity for scheduled runs and
+    connections, and remove personal accounts from automation paths.
+
+- item_id: "6.1.4"
+  area: 6
+  category: "Identity & Access Management"
+  pillar: Security
+  title: "Guest/external user access is explicitly governed"
+  artifact_types: [workspace]
+  inspector: WorkspaceInspector
+  protocol: rest
+  evidence: "Role assignment principals whose UPN contains the #EXT# guest marker."
+  rule: "binary: no guest (#EXT#) principals hold a workspace role"
+  rule_id: workspace_no_guest_access
+  coverage_semantics: binary
+  na_rule: "N/A when the tenant blocks guest access outright."
+  default_weight: normal
+  severity_hint: high
+  remediation: >-
+    Remove guest principals or bring them under an access package with an expiry and a
+    named sponsor, and record the business justification for each.
+
+# --------------------------------------------------------------- Area 11 — DevOps & Deployment
+
+- item_id: "11.1.1"
+  area: 11
+  category: "Version Control"
+  pillar: OperationalExcellence
+  title: "Git integration enabled for Fabric workspace"
+  artifact_types: [git]
+  inspector: GitInspector
+  protocol: rest
+  evidence: "GET /v1/workspaces/{id}/git/connection — connection state and provider details."
+  rule: "binary: git connection state is Connected"
+  rule_id: workspace_git_connected
+  coverage_semantics: binary
+  na_rule: "Never N/A."
+  default_weight: high
+  severity_hint: high
+  remediation: >-
+    Connect the workspace to an Azure DevOps or GitHub repository so item definitions
+    are versioned and changes are reviewable outside the Fabric portal.
+
+- item_id: "11.2.1"
+  area: 11
+  category: "CI/CD & Deployment Pipelines"
+  pillar: OperationalExcellence
+  title: "Fabric Deployment Pipelines configured (Dev → Test → Prod)"
+  artifact_types: [git]
+  inspector: GitInspector
+  protocol: rest
+  evidence: "Deployment pipelines the workspace is assigned to, and their stage count."
+  rule: "binary: workspace is bound to a deployment pipeline stage with three or more stages"
+  rule_id: workspace_deployment_pipeline
+  coverage_semantics: binary
+  na_rule: "N/A for a sandbox workspace with no promotion path."
+  default_weight: high
+  severity_hint: high
+  remediation: >-
+    Create a Dev/Test/Prod deployment pipeline, assign this workspace to its stage, and
+    make promotion the only path into production.
+
+# ------------------------------------------------------------ Area 12 — Cost & Capacity
+
+- item_id: "12.1.1"
+  area: 12
+  category: "Capacity Planning"
+  pillar: CostOptimization
+  title: "Fabric SKU selected based on workload analysis (not guesswork)"
+  artifact_types: [capacity]
+  inspector: CapacityInspector
+  protocol: rest
+  evidence: "Workspace capacityId resolved against GET /v1/capacities for SKU and state."
+  rule: "binary: workspace is assigned to an active capacity with a resolvable SKU"
+  rule_id: workspace_capacity_assigned
+  coverage_semantics: binary
+  na_rule: "Never N/A."
+  default_weight: normal
+  severity_hint: medium
+  remediation: >-
+    Assign the workspace to a dedicated Fabric capacity and record the sizing analysis
+    behind the chosen SKU, including the peak CU profile it was sized against.
+
+- item_id: "12.3.4"
+  area: 12
+  category: "Cost Optimization"
+  pillar: CostOptimization
+  title: "Unused or orphaned Fabric items cleaned up"
+  artifact_types: [workspace]
+  inspector: WorkspaceInspector
+  protocol: rest
+  evidence: >-
+    Item inventory scanned for scratch/personal naming markers (test, temp, copy of, bkp,
+    old, untitled, personal initials). A name-based proxy — runtime idleness needs the
+    per-item job history API, which is Phase 2.
+  rule: "coverage = items whose names carry no scratch marker / total items"
+  rule_id: workspace_no_orphaned_items
+  coverage_semantics: coverage
+  na_rule: "N/A when the workspace is empty."
+  default_weight: low
+  severity_hint: low
+  remediation: >-
+    Delete or move scratch and personal items out of shared workspaces, and add a
+    quarterly review of item inventory to the operations calendar.
