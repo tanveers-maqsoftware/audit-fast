@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from auditfast_mcp.fabric.client import FabricClient
-from auditfast_mcp.guardrail.core import EvidenceUnavailable
-from auditfast_mcp.inspectors.base import WorkspaceEvidence
+from auditfast.fabric.client import FabricClient
+from auditfast.guardrail.core import EvidenceUnavailable
+from auditfast.inspectors.base import WorkspaceEvidence
 
 
 class WorkspaceInspector:

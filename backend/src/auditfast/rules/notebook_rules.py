@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import re
 
-from auditfast_mcp.config import Settings
-from auditfast_mcp.inspectors.base import ArtifactEvidence, EvidenceBundle
-from auditfast_mcp.rules.outcome import RuleOutcome
-from auditfast_mcp.rules.pipeline_rules import SECRET_PATTERNS
+from auditfast.config import Settings
+from auditfast.inspectors.base import ArtifactEvidence, EvidenceBundle
+from auditfast.rules.outcome import RuleOutcome
+from auditfast.rules.pipeline_rules import SECRET_PATTERNS
 
 # Fabric marks the parameters cell with a tag; the .py export marks it with a comment.
 _PARAMETER_MARKERS = (

@@ -19,8 +19,9 @@ from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
-from auditfast_mcp import services
-from auditfast_mcp.config import get_settings
+from auditfast import services
+from auditfast.config import get_settings
+from auditfast.db import init_db
 
 mcp = FastMCP("auditfast")
 
@@ -141,4 +142,5 @@ async def auditfast_list_checks() -> dict:
 
 def run() -> None:
     get_settings().ensure_dirs()
+    init_db()
     mcp.run()

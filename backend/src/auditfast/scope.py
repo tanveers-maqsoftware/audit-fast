@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from auditfast_mcp.catalog.loader import load_catalog
-from auditfast_mcp.catalog.models import CheckRecord
-from auditfast_mcp.config import Settings
-from auditfast_mcp.fabric.client import ITEM_TYPE_TO_ARTIFACT
-from auditfast_mcp.inspectors.base import WorkspaceEvidence
+from auditfast.catalog.loader import load_catalog
+from auditfast.catalog.models import CheckRecord
+from auditfast.config import Settings
+from auditfast.fabric.client import ITEM_TYPE_TO_ARTIFACT
+from auditfast.inspectors.base import WorkspaceEvidence
 
 # Item types Core can currently collect evidence for.
 AUDITABLE_ITEM_TYPES: frozenset[str] = frozenset({"DataPipeline", "Notebook"})

@@ -6,15 +6,15 @@ orchestration below does not change (HLD 9, "Extensibility").
 
 from __future__ import annotations
 
-from auditfast_mcp.config import Settings, get_settings
-from auditfast_mcp.fabric.client import FabricClient
-from auditfast_mcp.inspectors.base import ArtifactEvidence, EvidenceBundle, WorkspaceEvidence
-from auditfast_mcp.inspectors.definitions import (
+from auditfast.config import Settings, get_settings
+from auditfast.fabric.client import FabricClient
+from auditfast.inspectors.base import ArtifactEvidence, EvidenceBundle, WorkspaceEvidence
+from auditfast.inspectors.definitions import (
     DefinitionInspector,
     NotebookInspector,
     PipelineInspector,
 )
-from auditfast_mcp.inspectors.workspace import WorkspaceInspector
+from auditfast.inspectors.workspace import WorkspaceInspector
 
 DEFINITION_INSPECTORS: tuple[DefinitionInspector, ...] = (
     PipelineInspector(),

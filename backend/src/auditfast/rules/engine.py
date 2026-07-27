@@ -10,12 +10,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from auditfast_mcp.catalog.models import CheckRecord, CoverageSemantics
-from auditfast_mcp.config import Settings, get_settings
-from auditfast_mcp.inspectors.base import EvidenceBundle
-from auditfast_mcp.rules import notebook_rules, pipeline_rules, workspace_rules
-from auditfast_mcp.rules.outcome import RuleOutcome, RuleStatus
-from auditfast_mcp.scoring.rubric import score_from_binary, score_from_coverage
+from auditfast.catalog.models import CheckRecord, CoverageSemantics
+from auditfast.config import Settings, get_settings
+from auditfast.inspectors.base import EvidenceBundle
+from auditfast.rules import notebook_rules, pipeline_rules, workspace_rules
+from auditfast.rules.outcome import RuleOutcome, RuleStatus
+from auditfast.scoring.rubric import score_from_binary, score_from_coverage
 
 RuleFn = Callable[[EvidenceBundle, Settings], RuleOutcome]
 

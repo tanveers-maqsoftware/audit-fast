@@ -13,9 +13,9 @@ from collections.abc import Awaitable, Callable
 
 import httpx
 
-from auditfast_mcp.config import Settings, get_settings
-from auditfast_mcp.guardrail.models import Decision, GuardDecision, RawResult, RestCall
-from auditfast_mcp.guardrail.rest_validator import validate_rest
+from auditfast.config import Settings, get_settings
+from auditfast.guardrail.models import Decision, GuardDecision, RawResult, RestCall
+from auditfast.guardrail.rest_validator import validate_rest
 
 # Signature of the audit-log sink the guardrail writes to.
 AuditSink = Callable[[dict], None]

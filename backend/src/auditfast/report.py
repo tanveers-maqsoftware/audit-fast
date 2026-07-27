@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from auditfast_mcp.scoring.rubric import AREA_NAMES, AREA_WEIGHTS, Rollup, risk_band
+from auditfast.scoring.rubric import AREA_NAMES, AREA_WEIGHTS, Rollup, risk_band
 
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 

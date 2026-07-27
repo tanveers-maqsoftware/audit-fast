@@ -15,9 +15,9 @@ import httpx
 import pytest
 import respx
 
-from auditfast_mcp import server, services
-from auditfast_mcp.config import Settings
-from auditfast_mcp.store.db import Store
+from auditfast import server, services
+from auditfast.config import Settings
+from auditfast.store.db import Store
 
 WORKSPACE_ID = "11111111-2222-3333-4444-555555555555"
 PIPELINE_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"

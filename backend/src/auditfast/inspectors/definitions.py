@@ -6,9 +6,9 @@ they report, so they share one implementation.
 
 from __future__ import annotations
 
-from auditfast_mcp.fabric.client import FabricClient
-from auditfast_mcp.guardrail.core import EvidenceUnavailable, GuardrailRejection
-from auditfast_mcp.inspectors.base import ArtifactEvidence
+from auditfast.fabric.client import FabricClient
+from auditfast.guardrail.core import EvidenceUnavailable, GuardrailRejection
+from auditfast.inspectors.base import ArtifactEvidence
 
 
 class DefinitionInspector:

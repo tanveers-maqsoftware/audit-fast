@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from auditfast_mcp.guardrail.models import RestCall
-from auditfast_mcp.guardrail.rest_validator import validate_rest
+from auditfast.guardrail.models import RestCall
+from auditfast.guardrail.rest_validator import validate_rest
 
 WORKSPACE = "11111111-2222-3333-4444-555555555555"
 ITEM = "66666666-7777-8888-9999-000000000000"
@@ -116,7 +116,7 @@ def test_unlisted_read_endpoints_are_rejected(url: str) -> None:
 
 def test_guardrail_exposes_no_write_method() -> None:
     """L6: the write path must not exist in the code, not merely be unused."""
-    from auditfast_mcp.guardrail.core import Guardrail
+    from auditfast.guardrail.core import Guardrail
 
     surface = {name for name in dir(Guardrail) if not name.startswith("_")}
     # aclose only releases pooled connections; it issues no request.

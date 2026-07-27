@@ -7,8 +7,8 @@ import json
 
 import pytest
 
-from auditfast_mcp.config import Settings
-from auditfast_mcp.inspectors.base import ArtifactEvidence, EvidenceBundle, WorkspaceEvidence
+from auditfast.config import Settings
+from auditfast.inspectors.base import ArtifactEvidence, EvidenceBundle, WorkspaceEvidence
 
 
 @pytest.fixture

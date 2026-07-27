@@ -1,7 +1,7 @@
 """The check catalog — records that drive tailoring, evidence collection, and scoring."""
 
-from auditfast_mcp.catalog.loader import checks_for_artifact_types, get_check, load_catalog
-from auditfast_mcp.catalog.models import (
+from auditfast.catalog.loader import checks_for_artifact_types, get_check, load_catalog
+from auditfast.catalog.models import (
     AutomationTier,
     CheckRecord,
     CoverageSemantics,

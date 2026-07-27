@@ -8,11 +8,11 @@ import respx
 from fastapi.testclient import TestClient
 
 import test_end_to_end as e2e
-from auditfast_mcp import services
-from auditfast_mcp.config import Settings
-from auditfast_mcp.store.db import Store
-from auditfast_mcp.webapi import app as webapp
-from auditfast_mcp.webapi.app import create_app
+from auditfast import services
+from auditfast.config import Settings
+from auditfast.store.db import Store
+from auditfast.webapi import app as webapp
+from auditfast.webapi.app import create_app
 
 
 @pytest.fixture

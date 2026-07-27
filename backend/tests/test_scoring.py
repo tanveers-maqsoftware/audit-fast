@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from auditfast_mcp.fabric.urls import parse_workspace_url
-from auditfast_mcp.scoring.rubric import (
+from auditfast.fabric.urls import parse_workspace_url
+from auditfast.scoring.rubric import (
     RiskBand,
     ScoredItem,
     risk_band,
@@ -13,7 +13,7 @@ from auditfast_mcp.scoring.rubric import (
     score_from_binary,
     score_from_coverage,
 )
-from auditfast_mcp.store.db import Store
+from auditfast.store.db import Store
 
 
 @pytest.mark.parametrize(

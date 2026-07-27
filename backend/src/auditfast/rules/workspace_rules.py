@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 
-from auditfast_mcp.config import Settings
-from auditfast_mcp.inspectors.base import EvidenceBundle
-from auditfast_mcp.rules.outcome import RuleOutcome
+from auditfast.config import Settings
+from auditfast.inspectors.base import EvidenceBundle
+from auditfast.rules.outcome import RuleOutcome
 
 # Names that mark an item as scratch, personal, or abandoned.
 _SCRATCH_MARKERS = re.compile(

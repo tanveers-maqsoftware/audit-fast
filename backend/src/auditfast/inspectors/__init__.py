@@ -1,18 +1,18 @@
 """Inspector suite — read-only evidence collection, one inspector per artifact type."""
 
-from auditfast_mcp.inspectors.base import (
+from auditfast.inspectors.base import (
     ArtifactEvidence,
     EvidenceBundle,
     Inspector,
     WorkspaceEvidence,
 )
-from auditfast_mcp.inspectors.definitions import (
+from auditfast.inspectors.definitions import (
     DefinitionInspector,
     NotebookInspector,
     PipelineInspector,
 )
-from auditfast_mcp.inspectors.registry import collect_evidence, discover_inventory
-from auditfast_mcp.inspectors.workspace import WorkspaceInspector
+from auditfast.inspectors.registry import collect_evidence, discover_inventory
+from auditfast.inspectors.workspace import WorkspaceInspector
 
 __all__ = [
     "ArtifactEvidence",

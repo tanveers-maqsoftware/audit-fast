@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from auditfast_mcp.catalog.loader import get_check, load_catalog
-from auditfast_mcp.rules import notebook_rules, pipeline_rules, workspace_rules
-from auditfast_mcp.rules.engine import RULES, evaluate_check, run_rules
-from auditfast_mcp.rules.outcome import RuleStatus
+from auditfast.catalog.loader import get_check, load_catalog
+from auditfast.rules import notebook_rules, pipeline_rules, workspace_rules
+from auditfast.rules.engine import RULES, evaluate_check, run_rules
+from auditfast.rules.outcome import RuleStatus
 
 
 def test_every_catalog_check_has_a_rule() -> None:

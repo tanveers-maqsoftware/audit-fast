@@ -10,8 +10,8 @@ import base64
 import json
 from typing import Any
 
-from auditfast_mcp.guardrail.core import EvidenceUnavailable, Guardrail
-from auditfast_mcp.guardrail.models import RestCall
+from auditfast.guardrail.core import EvidenceUnavailable, Guardrail
+from auditfast.guardrail.models import RestCall
 
 FABRIC_API = "https://api.fabric.microsoft.com/v1"
 

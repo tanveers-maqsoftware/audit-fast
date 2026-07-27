@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from urllib.parse import urlparse
 
-from auditfast_mcp.guardrail.models import Decision, GuardDecision, RestCall
+from auditfast.guardrail.models import Decision, GuardDecision, RestCall
 
 ALLOWED_HOSTS: frozenset[str] = frozenset(
     {

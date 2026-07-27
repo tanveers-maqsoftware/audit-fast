@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-from auditfast_mcp.fabric.client import FabricClient
+from auditfast.fabric.client import FabricClient
 
 
 @dataclass

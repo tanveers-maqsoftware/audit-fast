@@ -11,9 +11,9 @@ import json
 import re
 from typing import Any
 
-from auditfast_mcp.config import Settings
-from auditfast_mcp.inspectors.base import ArtifactEvidence, EvidenceBundle
-from auditfast_mcp.rules.outcome import RuleOutcome
+from auditfast.config import Settings
+from auditfast.inspectors.base import ArtifactEvidence, EvidenceBundle
+from auditfast.rules.outcome import RuleOutcome
 
 # Activities that reach an external system and therefore should carry a retry policy.
 RETRYABLE_ACTIVITIES = {

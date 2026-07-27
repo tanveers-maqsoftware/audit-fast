@@ -17,7 +17,7 @@ from typing import Any
 import anyio
 import msal
 
-from auditfast_mcp.config import Settings, get_settings
+from auditfast.config import Settings, get_settings
 
 
 class AuthError(RuntimeError):

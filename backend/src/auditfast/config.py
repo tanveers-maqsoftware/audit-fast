@@ -62,6 +62,12 @@ class Settings:
     )
     data_dir: Path = field(default_factory=_default_data_dir)
 
+    # Database connection. Defaults to a SQLite file under the data dir; set
+    # AUDITFAST_DATABASE_URL to a Postgres DSN (postgresql+psycopg://...) in production.
+    database_url_override: str = field(
+        default_factory=lambda: os.environ.get("AUDITFAST_DATABASE_URL", "")
+    )
+
     # Resource limits — protect the client's Fabric capacity (TAD 7, "Client-system safety").
     request_timeout_seconds: int = field(
         default_factory=lambda: _env_int("AUDITFAST_REQUEST_TIMEOUT_SECONDS", 30)
@@ -113,6 +119,14 @@ class Settings:
     @property
     def db_path(self) -> Path:
         return self.data_dir / "auditfast.sqlite3"
+
+    @property
+    def database_url(self) -> str:
+        """SQLAlchemy URL. Falls back to a SQLite file under the data dir."""
+        if self.database_url_override:
+            return self.database_url_override
+        # Forward slashes so the URL is valid on Windows too.
+        return f"sqlite:///{self.db_path.as_posix()}"
 
     @property
     def token_cache_path(self) -> Path:

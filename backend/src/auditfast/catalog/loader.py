@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from auditfast_mcp.catalog.models import CheckRecord
+from auditfast.catalog.models import CheckRecord
 
 CATALOG_PATH = Path(__file__).parent / "data" / "mvp_checks.yaml"
 
